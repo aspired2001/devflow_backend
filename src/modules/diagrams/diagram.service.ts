@@ -1,5 +1,6 @@
 import { prisma } from "../../config/db"
 import { ApiError } from "../../utils/ApiError"
+import { getCache, setCache, deleteCache } from "../../utils/cache"
 
 export const createDiagramIfNotExists = async (projectId: string) => {
     let diagram = await prisma.diagram.findUnique({
@@ -15,27 +16,50 @@ export const createDiagramIfNotExists = async (projectId: string) => {
     return diagram
 }
 
+// ✅ FIXED: Race condition + cache invalidation
 export const saveVersion = async (projectId: string, data: any) => {
-    const diagram = await createDiagramIfNotExists(projectId)
+    return prisma.$transaction(async (tx) => {
+        let diagram = await tx.diagram.findUnique({
+            where: { projectId }
+        })
 
-    const last = await prisma.version.findFirst({
-        where: { diagramId: diagram.id },
-        orderBy: { version: "desc" }
-    })
-
-    const nextVersion = (last?.version || 0) + 1
-
-    return prisma.version.create({
-        data: {
-            diagramId: diagram.id,
-            version: nextVersion,
-            data: data as any 
+        if (!diagram) {
+            diagram = await tx.diagram.create({
+                data: { projectId }
+            })
         }
+
+        const last = await tx.version.findFirst({
+            where: { diagramId: diagram.id },
+            orderBy: { version: "desc" }
+        })
+
+        const nextVersion = (last?.version || 0) + 1
+
+        const created = await tx.version.create({
+            data: {
+                diagramId: diagram.id,
+                version: nextVersion,
+                data: data as any
+            }
+        })
+
+        // ✅ CRITICAL: invalidate cache after write
+        await deleteCache(`diagram:${projectId}`)
+
+        return created
     })
 }
 
 export const getLatestDiagram = async (projectId: string) => {
-    return prisma.diagram.findUnique({
+    const cacheKey = `diagram:${projectId}`
+
+    // ✅ STEP 1: Check cache FIRST
+    const cached = await getCache(cacheKey)
+    if (cached) return cached
+
+    // ✅ STEP 2: Fetch from DB
+    const diagram = await prisma.diagram.findUnique({
         where: { projectId },
         include: {
             versions: {
@@ -44,6 +68,13 @@ export const getLatestDiagram = async (projectId: string) => {
             }
         }
     })
+
+    // ✅ STEP 3: Store in cache
+    if (diagram) {
+        await setCache(cacheKey, diagram, 60)
+    }
+
+    return diagram
 }
 
 export const getVersions = async (projectId: string) => {
@@ -59,37 +90,45 @@ export const getVersions = async (projectId: string) => {
     return diagram?.versions
 }
 
+// ✅ FIXED: Race condition + cache invalidation
 export const restoreVersion = async (versionId: string, userId: string) => {
-    const version = await prisma.version.findUnique({
-        where: { id: versionId },
-        include: {
-            diagram: {
-                include: {
-                    project: true
+    return prisma.$transaction(async (tx) => {
+        const version = await tx.version.findUnique({
+            where: { id: versionId },
+            include: {
+                diagram: {
+                    include: {
+                        project: true
+                    }
                 }
             }
+        })
+
+        if (!version) throw new ApiError(404, "Version not found")
+
+        if (version.diagram.project.ownerId !== userId) {
+            throw new ApiError(403, "Forbidden")
         }
-    })
 
-    if (!version) throw new ApiError(404, "Version not found")
+        const last = await tx.version.findFirst({
+            where: { diagramId: version.diagramId },
+            orderBy: { version: "desc" }
+        })
 
-    if (version.diagram.project.ownerId !== userId) {
-        throw new ApiError(403, "Forbidden")
-    }
+        const nextVersion = (last?.version || 0) + 1
 
-    const last = await prisma.version.findFirst({
-        where: { diagramId: version.diagramId },
-        orderBy: { version: "desc" }
-    })
+        const created = await tx.version.create({
+            data: {
+                diagramId: version.diagramId,
+                version: nextVersion,
+                data: version.data as any
+            }
+        })
 
-    const nextVersion = (last?.version || 0) + 1
+        // ✅ CRITICAL: invalidate cache after restore
+        await deleteCache(`diagram:${version.diagram.projectId}`)
 
-    return prisma.version.create({
-        data: {
-            diagramId: version.diagramId,
-            version: nextVersion,
-            data: version.data as any
-        }
+        return created
     })
 }
 

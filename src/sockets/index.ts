@@ -12,14 +12,12 @@ export const initSocket = (server: HTTPServer) => {
         registerDiagramHandlers(io, socket)
     })
 
-    // ✅ Redis listener HERE (has access to io)
-    // sub.subscribe("diagram_updates")
+    sub.subscribe("diagram_updates")
 
-    // sub.on("message", (channel, message) => {
-    //     const { projectId, data } = JSON.parse(message)
-
-    //     io.to(projectId).emit("diagram_update", data)
-    // })
+    sub.on("message", (channel: string, message: string) => {
+        const { projectId, data } = JSON.parse(message)
+        io.to(projectId).emit("diagram_update", data)
+    })
 
     return io
 }
