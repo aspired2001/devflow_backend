@@ -14,6 +14,8 @@ model User {
  createdAt DateTime @default(now())
 
  projects  Project[]
+ comments  Comment[] 
+  adrs      Adr[]   
 }
 
 model Project {
@@ -44,4 +46,46 @@ model Version {
 
  diagram   Diagram  @relation(fields: [diagramId], references: [id])
 }
+model Comment {
+  id         String   @id @default(uuid())
+  content    String
 
+  projectId  String
+  diagramId  String?
+  nodeId     String?
+
+  parentId   String?
+  parent     Comment? @relation("Thread", fields: [parentId], references: [id])
+  replies    Comment[] @relation("Thread")
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  createdAt  DateTime @default(now())
+}
+model Adr {
+  id           String   @id @default(uuid())
+  projectId    String
+  title        String
+  decision     String
+  reason       String
+  consequences String?
+  status       String
+
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+
+  createdAt    DateTime @default(now())
+}
+
+model AiReview {
+  id        String   @id @default(uuid())
+  projectId String
+  hash      String
+  result    Json?
+  status    String   // pending | completed | failed
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([hash])
+}
