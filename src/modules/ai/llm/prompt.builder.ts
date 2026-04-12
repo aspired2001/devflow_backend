@@ -1,11 +1,14 @@
-// llm/prompt.builder.ts
 import { Graph } from "../types"
 
-export const buildPrompt = (graph: Graph, insights: any[]) => {
+export const buildPrompt = (
+  graph: Graph,
+  insights: any[],
+  advanced: any
+) => {
   return `
-You are a senior staff-level system design reviewer.
+You are a STAFF+ level System Design Engineer (ex-Google / Amazon).
 
-Analyze the given architecture deeply with production-level thinking.
+Analyze the architecture deeply with strong focus on scalability, reliability, cost, and real-world production readiness.
 
 ========================
 ARCHITECTURE GRAPH
@@ -18,71 +21,84 @@ Edges:
 ${JSON.stringify(graph.edges, null, 2)}
 
 ========================
-PRE-COMPUTED INSIGHTS
+PRECOMPUTED INSIGHTS
 ========================
+
 ${JSON.stringify(insights, null, 2)}
 
 ========================
-ANALYSIS INSTRUCTIONS
+ADVANCED SYSTEM SIGNALS
 ========================
 
-You must evaluate:
+${JSON.stringify(advanced, null, 2)}
 
-1. Architecture Style
-- Identify if it is monolith, layered, microservices, event-driven, etc.
+========================
+TASKS (STRICT)
+========================
 
-2. Data Flow & Coupling
-- Identify tight coupling, direct dependencies, bad layering
-- Detect if API Gateway is overloaded
+1. Identify architectural flaws:
+   - Scalability bottlenecks
+   - Reliability risks
+   - Tight coupling
 
-3. Scalability
-- Detect sync bottlenecks
-- Identify missing async boundaries
-- Evaluate cache usage
+2. Detect anti-patterns:
+   - N+1 calls
+   - Chatty services
+   - God services
+   - Fully synchronous chains
 
-4. Reliability
-- Detect single points of failure
-- Analyze cascading failure risks
+3. Classify architecture:
+   - monolith / layered / microservices
 
-5. Performance
-- Analyze latency paths
-- Identify potential bottlenecks
+4. Suggest improvements:
+   - Infra-level (AWS/GCP specific)
+   - Design patterns (CQRS, Event-driven, Caching strategies)
 
-6. Missing Components
-- Queue, load balancer, monitoring, retries, etc.
+5. Recommend missing components:
+   - Load balancer
+   - Queue system
+   - Cache layer
+   - Observability (logs, metrics, tracing)
 
-7. Best Practices Violations
-- Separation of concerns
-- Improper access patterns
+6. Use Advanced Signals to:
+   - Validate or challenge cost estimation
+   - Improve latency assumptions
+   - Suggest scaling strategies
+
+7. Generate high-quality ADRs
 
 ========================
 OUTPUT FORMAT (STRICT JSON)
 ========================
 
 {
-  "analysis": "High-level architectural summary",
+  "analysis": "deep technical explanation",
+
   "issues": [
     {
-      "id": "ERR-XXX",
-      "severity": "low | medium | high",
-      "component": "Component name",
-      "description": "Clear explanation of the issue"
+      "id": "ERR-001",
+      "severity": "low|medium|high",
+      "component": "string",
+      "description": "string"
     }
   ],
+
   "suggestions": [
     {
-      "target": "Component",
-      "action": "What to change",
-      "benefit": "Why it improves system"
+      "target": "string",
+      "action": "string",
+      "benefit": "string",
+      "infra": "AWS/GCP specific suggestion"
     }
   ],
+
   "adr": [
     {
       "title": "ADR title",
       "status": "Proposed",
-      "context": "Why decision is needed",
-      "decision": "What is chosen",
-      "consequences": "Tradeoffs"
+      "context": "string",
+      "decision": "string",
+      "consequences": "string"
     }
   ]
 }

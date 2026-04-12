@@ -4,44 +4,71 @@ exports.buildGraph = void 0;
 const buildGraph = (elements) => {
     const nodesMap = new Map();
     const edges = [];
-    // ✅ STEP 1: Build nodes (clean + enriched)
+    // 🔥 STEP 0: Build text map (AGAIN here for safety)
+    const textMap = new Map();
     for (const el of elements) {
-        const archType = el.customData?.archType;
-        //  Skip invalid / label-like nodes
-        if (!archType || typeof archType !== "string")
+        if (el.type === "text" && el.containerId) {
+            textMap.set(el.containerId, el.text?.toLowerCase() || "");
+        }
+    }
+    const inferType = (label = "") => {
+        if (!label)
+            return "unknown";
+        if (label.includes("client"))
+            return "client";
+        if (label.includes("gateway"))
+            return "apiGateway";
+        if (label.includes("api"))
+            return "apiGateway";
+        if (label.includes("service"))
+            return "service";
+        if (label.includes("backend"))
+            return "service";
+        if (label.includes("cache"))
+            return "cache";
+        if (label.includes("redis"))
+            return "cache";
+        if (label.includes("db"))
+            return "database";
+        if (label.includes("database"))
+            return "database";
+        return "service";
+    };
+    // ✅ STEP 1: Build nodes (FIXED)
+    for (const el of elements) {
+        if (el.type === "arrow")
             continue;
-        if (archType.toLowerCase().includes("label"))
-            continue;
-        // ✅ Avoid duplicates
+        const label = textMap.get(el.id) || "";
+        const archType = el.customData?.archType ||
+            inferType(label);
+        // 🔥 DO NOT SKIP — even if unknown
         if (!nodesMap.has(el.id)) {
             nodesMap.set(el.id, {
                 id: el.id,
-                type: archType,
-                // ✅ NEW: Optional metadata (non-breaking)
+                type: archType || "unknown",
                 metadata: {
-                    label: el.text || null,
-                    position: el.x && el.y ? { x: el.x, y: el.y } : null
+                    label: label || null,
+                    position: el.x && el.y
+                        ? { x: el.x, y: el.y }
+                        : null
                 }
             });
         }
     }
-    // ✅ STEP 2: Build edges (with type support)
+    // ✅ STEP 2: Build edges (unchanged but safer)
     for (const el of elements) {
         if (el.type !== "arrow")
             continue;
         const from = el.startBinding?.elementId;
         const to = el.endBinding?.elementId;
-        //  Skip broken edges
         if (!from || !to)
             continue;
         if (!nodesMap.has(from) || !nodesMap.has(to))
             continue;
-        // ✅ Default type (future extensibility)
-        const edgeType = el.customData?.edgeType || "sync"; // future: async, read, write
         edges.push({
             from,
             to,
-            type: edgeType
+            type: el.customData?.edgeType || "sync"
         });
     }
     return {

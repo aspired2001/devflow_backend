@@ -1,36 +1,65 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateInsights = void 0;
-const generateInsights = (patterns) => {
+const generateInsights = (p) => {
     const insights = [];
-    if (!patterns.hasCache) {
+    // 🔥 Core infra gaps
+    if (!p.hasCache) {
         insights.push({
             type: "performance",
-            message: "No caching layer detected (Redis recommended)",
+            message: "Missing caching layer (Redis recommended)",
             severity: "medium"
         });
     }
-    if (!patterns.hasQueue) {
+    if (!p.hasQueue) {
         insights.push({
             type: "scalability",
-            message: "No async queue found (BullMQ/Kafka recommended)",
+            message: "No async queue (Kafka / SQS recommended)",
             severity: "high"
         });
     }
-    if (!patterns.hasAPI) {
+    if (!p.hasAPI) {
         insights.push({
             type: "architecture",
-            message: "Missing API Gateway layer",
+            message: "Missing API Gateway",
             severity: "high"
         });
     }
-    if (patterns.hasClient && patterns.hasDB && !patterns.hasService) {
+    // 🔥 Anti-patterns
+    if (p.godService) {
         insights.push({
             type: "architecture",
-            message: "Client directly talking to DB (bad design)",
+            message: "God Service detected (violates SRP, scaling risk)",
             severity: "high"
         });
     }
+    if (p.isChatty) {
+        insights.push({
+            type: "performance",
+            message: "Chatty service communication (high network overhead)",
+            severity: "medium"
+        });
+    }
+    if (p.hasDirectApiCache) {
+        insights.push({
+            type: "architecture",
+            message: "API Gateway directly accessing cache (leaky abstraction)",
+            severity: "medium"
+        });
+    }
+    if (p.isFullySync) {
+        insights.push({
+            type: "scalability",
+            message: "Fully synchronous architecture (risk of cascading failures)",
+            severity: "high"
+        });
+    }
+    // 🔥 Architecture classification insight
+    insights.push({
+        type: "architecture",
+        message: `Detected architecture: ${p.architecture}`,
+        severity: "low"
+    });
     return insights;
 };
 exports.generateInsights = generateInsights;

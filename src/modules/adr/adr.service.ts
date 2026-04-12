@@ -8,7 +8,7 @@ export const createADR = (
     return repo.createADR({
         ...data,
         projectId,
-        createdBy: userId
+        createdById: userId,   // ← was "createdBy" — must match the scalar FK field name in the schema
     })
 }
 

@@ -1,8 +1,18 @@
 import { prisma } from "../../config/db"
 
-export const findExisting = (projectId: string, hash: string) => {
+export const findByHash = (projectId: string, hash: string) => {
     return prisma.aiReview.findFirst({
-        where: { projectId, hash, status: "completed" }
+        where: {
+            projectId,
+            hash,
+            status: "completed"
+        }
+    })
+}
+
+export const findById = (id: string) => {
+    return prisma.aiReview.findUnique({
+        where: { id }
     })
 }
 
@@ -11,6 +21,7 @@ export const createJob = (projectId: string, hash: string) => {
         data: {
             projectId,
             hash,
+            result: {},
             status: "pending"
         }
     })
@@ -19,7 +30,10 @@ export const createJob = (projectId: string, hash: string) => {
 export const completeJob = (id: string, result: any) => {
     return prisma.aiReview.update({
         where: { id },
-        data: { result, status: "completed" }
+        data: {
+            result,
+            status: "completed"
+        }
     })
 }
 

@@ -15,83 +15,70 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStatus = exports.runAsyncAnalysis = exports.runAnalysis = void 0;
-const ai_service_1 = require("./ai.service");
-const ai_queue_1 = require("./queue/ai.queue");
+exports.getStatus = exports.runAI = void 0;
+const service = __importStar(require("./ai.service"));
 const repo = __importStar(require("./ai.repository"));
-const crypto_1 = __importDefault(require("crypto"));
-const db_1 = require("../../config/db");
-const runAnalysis = async (req, res) => {
-    const projectId = Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId;
-    const result = await (0, ai_service_1.analyzeDiagram)(projectId);
-    res.json(result);
-};
-exports.runAnalysis = runAnalysis;
-const runAsyncAnalysis = async (req, res) => {
-    const projectId = Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId;
-    // ✅ Get latest diagram
-    const diagram = await db_1.prisma.diagram.findUnique({
-        where: { projectId },
-        include: {
-            versions: {
-                orderBy: { createdAt: "desc" },
-                take: 1
-            }
-        }
-    });
-    if (!diagram || !diagram.versions.length) {
-        throw new Error("No diagram found");
-    }
-    const data = diagram.versions[0].data;
-    // ✅ Hash
-    const hash = crypto_1.default
-        .createHash("sha256")
-        .update(JSON.stringify(data))
-        .digest("hex");
-    // ✅ Check existing
-    const existing = await repo.findExisting(projectId, hash);
-    if (existing) {
+const ai_queue_1 = require("./queue/ai.queue");
+const cache_1 = require("../../utils/cache");
+const runAI = async (req, res) => {
+    const { projectId } = req.params;
+    // 🔹 Step 1: Run lightweight analysis to get hash ONLY
+    const preview = await service.analyzeDiagram(projectId);
+    const hash = preview.hash;
+    const cacheKey = `ai:${projectId}:${hash}`;
+    // ✅ CACHE CHECK
+    const cached = await (0, cache_1.getCache)(cacheKey);
+    if (cached) {
         return res.json({
             status: "completed",
+            source: "cache",
+            result: cached
+        });
+    }
+    // ✅ DB CHECK
+    const existing = await repo.findByHash(projectId, hash);
+    if (existing) {
+        await (0, cache_1.setCache)(cacheKey, existing.result, 300);
+        return res.json({
+            status: "completed",
+            source: "db",
             result: existing.result
         });
     }
-    // ✅ Create DB job FIRST
+    // ✅ CREATE JOB
     const job = await repo.createJob(projectId, hash);
-    // ✅ Push to queue with jobId
     await ai_queue_1.aiQueue.add("analyze", {
         projectId,
         jobId: job.id
     });
-    res.json({
-        status: "queued",
+    return res.json({
+        status: "pending",
         jobId: job.id
     });
 };
-exports.runAsyncAnalysis = runAsyncAnalysis;
-// ✅ Status endpoint (fix param typing issue)
+exports.runAI = runAI;
+// 🔹 STATUS
 const getStatus = async (req, res) => {
-    const jobId = Array.isArray(req.params.jobId)
-        ? req.params.jobId[0]
-        : req.params.jobId;
-    const job = await db_1.prisma.aiReview.findUnique({
-        where: { id: jobId }
-    });
+    const jobId = req.params.jobId;
+    const job = await repo.findById(jobId);
     if (!job) {
         return res.status(404).json({ error: "Job not found" });
     }

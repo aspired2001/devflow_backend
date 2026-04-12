@@ -1,6 +1,7 @@
 import { Worker } from "bullmq"
 import { analyzeDiagram } from "../ai.service"
 import * as repo from "../ai.repository"
+import { setCache } from "../../../utils/cache"
 
 export const aiWorker = new Worker(
     "ai-analysis",
@@ -8,30 +9,23 @@ export const aiWorker = new Worker(
         const { projectId, jobId } = job.data
 
         try {
-            const start = Date.now()
+            console.log("JOB START:", jobId)
 
             const result = await analyzeDiagram(projectId)
 
-            // ✅ Save result
+            if (!result.graph.nodes.length) {
+                throw new Error("Invalid graph")
+            }
+
             await repo.completeJob(jobId, result)
 
-            const duration = Date.now() - start
+            const cacheKey = `ai:${projectId}:${result.hash}`
+            await setCache(cacheKey, result, 300)
 
-            console.log({
-                service: "AI_WORKER",
-                jobId,
-                status: "completed",
-                duration: `${duration}ms`
-            })
+            console.log("JOB COMPLETED:", jobId)
         } catch (error) {
-            console.error({
-                service: "AI_WORKER",
-                jobId,
-                status: "failed",
-                error: (error as Error).message
-            })
+            console.error("JOB FAILED:", jobId, error)
 
-            // ✅ Ensure failure handled
             await repo.failJob(jobId)
         }
     },
