@@ -1,81 +1,62 @@
 import { Request, Response } from "express"
-import { analyzeDiagram } from "./ai.service"
-import { aiQueue } from "./queue/ai.queue"
+import * as service from "./ai.service"
 import * as repo from "./ai.repository"
-import crypto from "crypto"
-import { prisma } from "../../config/db"
+import { aiQueue } from "./queue/ai.queue"
+import { getCache, setCache } from "../../utils/cache"
 
-export const runAnalysis = async (req: Request, res: Response) => {
-    const projectId = Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId
+export const runAI = async (
+    req: Request<{ projectId: string }>,
+    res: Response
+) => {
+    const { projectId } = req.params
 
-    const result = await analyzeDiagram(projectId)
-    res.json(result)
-}
+    // 🔹 Step 1: Run lightweight analysis to get hash ONLY
+    const preview = await service.analyzeDiagram(projectId)
+    const hash = preview.hash
 
-export const runAsyncAnalysis = async (req: Request, res: Response) => {
-    const projectId = Array.isArray(req.params.projectId)
-        ? req.params.projectId[0]
-        : req.params.projectId
+    const cacheKey = `ai:${projectId}:${hash}`
 
-    // ✅ Get latest diagram
-    const diagram = await prisma.diagram.findUnique({
-        where: { projectId },
-        include: {
-            versions: {
-                orderBy: { createdAt: "desc" },
-                take: 1
-            }
-        }
-    })
-
-    if (!diagram || !diagram.versions.length) {
-        throw new Error("No diagram found")
-    }
-
-    const data = diagram.versions[0].data
-
-    // ✅ Hash
-    const hash = crypto
-        .createHash("sha256")
-        .update(JSON.stringify(data))
-        .digest("hex")
-
-    // ✅ Check existing
-    const existing = await repo.findExisting(projectId, hash)
-
-    if (existing) {
+    // ✅ CACHE CHECK
+    const cached = await getCache(cacheKey)
+    if (cached) {
         return res.json({
             status: "completed",
+            source: "cache",
+            result: cached
+        })
+    }
+
+    // ✅ DB CHECK
+    const existing = await repo.findByHash(projectId, hash)
+    if (existing) {
+        await setCache(cacheKey, existing.result, 300)
+
+        return res.json({
+            status: "completed",
+            source: "db",
             result: existing.result
         })
     }
 
-    // ✅ Create DB job FIRST
+    // ✅ CREATE JOB
     const job = await repo.createJob(projectId, hash)
 
-    // ✅ Push to queue with jobId
     await aiQueue.add("analyze", {
         projectId,
         jobId: job.id
     })
 
-    res.json({
-        status: "queued",
+    return res.json({
+        status: "pending",
         jobId: job.id
     })
 }
 
-// ✅ Status endpoint (fix param typing issue)
+// 🔹 STATUS
 export const getStatus = async (req: Request, res: Response) => {
-    const jobId = Array.isArray(req.params.jobId)
-        ? req.params.jobId[0]
-        : req.params.jobId
+    const jobId = req.params.jobId as string
 
-    const job = await prisma.aiReview.findUnique({
-        where: { id: jobId }
-    })
+    const job = await repo.findById(jobId)
 
     if (!job) {
         return res.status(404).json({ error: "Job not found" })
