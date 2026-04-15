@@ -3,13 +3,14 @@ import cors from "cors"
 import routes from "./routes"
 import { errorHandler } from "./middlewares/error.middleware"
 
+import { Request, Response } from "express"
+
 const app = express()
 
 app.use(cors())
 app.use(express.json())
 
-// ✅ ADD THIS HERE
-app.get("/health", (req, res) => {
+app.get("/health", (req: Request, res: Response) => {
     res.status(200).send("OK")
 })
 
