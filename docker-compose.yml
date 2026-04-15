@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: devflow_api
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env.docker
+    depends_on:
+      - redis
+      - postgres
+    command: npm run start
+
+  worker:
+    build: .
+    container_name: devflow_worker
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+    command: npm run start:worker
+
+  redis:
+    image: redis:7
+    container_name: devflow_redis
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15
+    container_name: devflow_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: devflow_db
+    ports:
+      - "5432:5432"
