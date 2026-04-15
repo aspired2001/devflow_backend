@@ -1,14 +1,15 @@
 import Redis from "ioredis"
 
-const options = {
-    host: "127.0.0.1",
-    port: 6379,
-    maxRetriesPerRequest: null
-}
+const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379"
 
-// 🔹 Main client (general use)
-export const redis = new Redis(options)
+const options =
+    process.env.REDIS_URL
+        ? { tls: {}, maxRetriesPerRequest: null }
+        : { maxRetriesPerRequest: null }
 
-// 🔹 Pub/Sub clients (IMPORTANT for scaling)
-export const pub = new Redis(options)
-export const sub = new Redis(options)
+// 🔹 Main client
+export const redis = new Redis(redisUrl, options)
+
+// 🔹 Pub/Sub clients
+export const pub = new Redis(redisUrl, options)
+export const sub = new Redis(redisUrl, options)
