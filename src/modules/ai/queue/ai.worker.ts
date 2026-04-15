@@ -1,4 +1,5 @@
 import { Worker } from "bullmq"
+import { redis } from "../../../config/redis"
 import { analyzeDiagram } from "../ai.service"
 import * as repo from "../ai.repository"
 import { setCache } from "../../../utils/cache"
@@ -30,9 +31,6 @@ export const aiWorker = new Worker(
         }
     },
     {
-        connection: {
-            host: "127.0.0.1",
-            port: 6379
-        }
+        connection: redis
     }
 )
